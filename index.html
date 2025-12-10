@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-Peer Sync Dashboard</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      overflow-x: hidden;
+    }
+    
+    /* Sidebar */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: -250px;
+      width: 250px;
+      height: 100vh;
+      background-color: #343a40;
+      color: white;
+      transition: left 0.3s;
+      z-index: 1000;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    
+    #sidebar.active {
+      left: 0;
+    }
+    
+    #sidebar .sidebar-header {
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    #sidebar .nav-link {
+      color: rgba(255,255,255,0.8);
+      padding: 10px 15px;
+      margin: 5px 0;
+      border-radius: 5px;
+      text-decoration: none;
+      display: block;
+      transition: all 0.3s;
+    }
+    
+    #sidebar .nav-link:hover {
+      background-color: rgba(255,255,255,0.1);
+      color: white;
+    }
+    
+    #sidebar .nav-link.active {
+      background-color: #007bff;
+      color: white;
+    }
+    
+    /* Overlay */
+    #sidebarOverlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+    
+    #sidebarOverlay.active {
+      display: block;
+    }
+    
+    /* Main content */
+    #mainContent {
+      margin-left: 0;
+      transition: margin-left 0.3s;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    @media (min-width: 768px) {
+      #sidebar {
+        left: 0;
+      }
+      #mainContent {
+        margin-left: 250px;
+      }
+      #sidebarToggle {
+        display: none;
+      }
+    }
+    
+    /* Section container */
+    .section-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    
+    /* Full height sections */
+    #documentsSection .card,
+    #logsSection .card {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 140px);
+      max-height: calc(100vh - 140px);
+    }
+    
+    #documentsSection .card-body,
+    #logsSection .card-body {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    #documentsSection .table-responsive {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+    
+    /* Table responsive */
+    .table-responsive {
+      overflow-x: auto;
+    }
+    
+    table {
+      font-size: 14px;
+    }
+    
+    th, td {
+      white-space: nowrap;
+    }
+    
+    @media (max-width: 768px) {
+      th, td {
+        font-size: 12px;
+        padding: 4px;
+      }
+    }
+    
+    /* Log box */
+    #logBox {
+      height: 100%;
+      min-height: 400px;
+      overflow-y: auto;
+      overflow-x: auto;
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      font-family: 'Courier New', monospace;
+      border-radius: 5px;
+      font-size: 12px;
+      flex: 1;
+    }
+    
+    /* Status dot */
+    #mqttDot {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+    
+    /* Modals */
+    #editModal, #addModal, #addFormModal, #deleteModal {
+      display: none;
+      position: fixed;
+      z-index: 1050;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      overflow-y: auto;
+    }
+    
+    #editModalContent, #addModalContent, #addFormModalContent, #deleteModalContent {
+      margin: 2rem auto;
+      max-width: 500px;
+    }
+    
+    @media (max-width: 576px) {
+      #editModalContent, #addModalContent, #addFormModalContent, #deleteModalContent {
+        margin: 1rem;
+        max-width: calc(100% - 2rem);
+      }
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    
+    .action-buttons button {
+      padding: 4px 8px;
+      font-size: 11px;
+      width: auto;
+    }
+    
+    /* Card improvements */
+    .card {
+      margin-bottom: 20px;
+    }
+    
+    .card-header {
+      font-weight: bold;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-DPXT8Be3.js"></script>
+</head>
+<body class="bg-light">
+
+<!-- Sidebar -->
+<div id="sidebar">
+  <div class="sidebar-header">
+    <h5 class="text-white mb-0">🌐 Sync Dashboard</h5>
+  </div>
+  <nav class="nav flex-column">
+    <a class="nav-link active" href="#status" onclick="showSection('status'); return false;">
+      📊 Status
+    </a>
+    <a class="nav-link" href="#actions" onclick="showSection('actions'); return false;">
+      ⚡ Actions
+    </a>
+    <a class="nav-link" href="#documents" onclick="showSection('documents'); return false;">
+      📄 Documents
+    </a>
+    <a class="nav-link" href="#logs" onclick="showSection('logs'); return false;">
+      📜 Logs
+    </a>
+  </nav>
+</div>
+
+<!-- Sidebar Overlay -->
+<div id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+<!-- Main Content -->
+<div id="mainContent">
+  <!-- Top Bar -->
+  <nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="container-fluid">
+      <button class="btn btn-outline-light" id="sidebarToggle" onclick="toggleSidebar()">
+        ☰ Menu
+      </button>
+      <h4 class="navbar-brand mb-0">🌐 Multi-Peer Sync Dashboard</h4>
+      <div></div>
+    </div>
+  </nav>
+
+    <!-- Status Section -->
+    <div class="row mb-3" id="statusSection">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">📊 Status</h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-2">
+              <strong>MQTT:</strong>
+              <span id="mqttDot" class="bg-secondary"></span>
+              <span id="mqttText">Connecting...</span>
+            </div>
+            <div class="mb-2">
+              <strong>Pending Queue:</strong>
+              <span class="badge bg-warning text-dark ms-2" id="pendingCount">0</span>
+            </div>
+            <div class="mb-3">
+              <strong>Client ID:</strong>
+              <code class="ms-2" id="clientId">...</code>
+            </div>
+            <div class="d-grid gap-2 d-md-flex">
+              <button id="simulateOffline" class="btn btn-outline-danger btn-sm">Sim Offline</button>
+              <button id="simulateOnline" class="btn btn-outline-success btn-sm">Sim Online</button>
+              <button id="manualSyncBtn" class="btn btn-info btn-sm text-white">🔄 Manual Sync</button>
+              <button id="clearDataBtn" class="btn btn-danger btn-sm">🗑️ Clear Data</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions Section -->
+    <div class="row mb-3" id="actionsSection">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-success text-white">
+            <h5 class="card-title mb-0">⚡ Actions</h5>
+          </div>
+          <div class="card-body">
+            <div class="d-grid gap-2">
+              <button id="addFormBtn" class="btn btn-success">➕ Add Form (Nama/Alamat/Tel)</button>
+              <button id="addRecordBtn" class="btn btn-info text-white">➕ Add Custom Field</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Documents Section -->
+    <div class="row mb-3" id="documentsSection" style="flex: 1; display: none; min-height: 0;">
+      <div class="col-12 h-100">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-info text-white">
+            <h5 class="card-title mb-0">📄 Documents (All Peers)</h5>
+          </div>
+          <div class="card-body p-0" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+            <div class="table-responsive" style="flex: 1; overflow-y: auto; overflow-x: auto;">
+              <table class="table table-striped table-hover table-sm mb-0" id="docTable">
+                <thead class="table-dark sticky-top">
+                  <tr>
+                    <th>Table</th>
+                    <th>Doc ID</th>
+                    <th>Field</th>
+                    <th>Value</th>
+                    <th>Timestamp</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="docBody">
+                  <tr><td colspan="6" class="text-center">No data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs Section -->
+    <div class="row mb-3" id="logsSection">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-dark text-white">
+            <h5 class="card-title mb-0">📜 Logs</h5>
+          </div>
+          <div class="card-body">
+            <div id="logBox"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal">
+  <div id="editModalContent" class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">✏️ Edit Field</h5>
+        <button type="button" class="btn-close" onclick="closeEditModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <small class="text-muted">Peer ID:</small>
+          <div><code id="editPeerId" class="text-primary"></code></div>
+        </div>
+        <div class="mb-2">
+          <small class="text-muted">Doc ID:</small>
+          <div><code id="editDocId" class="text-primary"></code></div>
+        </div>
+        <div class="mb-3">
+          <small class="text-muted">Field:</small>
+          <div><code id="editFieldName" class="text-info"></code></div>
+        </div>
+        <div class="mb-3">
+          <label for="editFieldValue" class="form-label">New Value <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="editFieldValue" placeholder="Enter new value..." required>
+          <div class="form-text">Enter the new value for this field.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelEditBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveEditBtn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Form Modal -->
+<div id="addFormModal">
+  <div id="addFormModalContent" class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">➕ Add Form Data</h5>
+        <button type="button" class="btn-close" onclick="closeAddFormModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info mb-3">
+          <strong>Document ID:</strong> <code id="generatedFormDocId">(will be generated)</code>
+        </div>
+        <div class="mb-3">
+          <label for="addFormDocName" class="form-label">Collection/Table Name</label>
+          <input type="text" class="form-control" id="addFormDocName" placeholder="e.g., users, products, orders...">
+          <div class="form-text">Optional: Name of the collection or table.</div>
+        </div>
+        <div class="mb-3">
+          <label for="addFormNama" class="form-label">Nama</label>
+          <input type="text" class="form-control" id="addFormNama" placeholder="Enter nama...">
+          <div class="form-text">Optional: Person's name.</div>
+        </div>
+        <div class="mb-3">
+          <label for="addFormAlamat" class="form-label">Alamat</label>
+          <input type="text" class="form-control" id="addFormAlamat" placeholder="Enter alamat...">
+          <div class="form-text">Optional: Address information.</div>
+        </div>
+        <div class="mb-3">
+          <label for="addFormTel" class="form-label">No Tel</label>
+          <input type="text" class="form-control" id="addFormTel" placeholder="Enter no tel...">
+          <div class="form-text">Optional: Phone number.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelFormBtn">Cancel</button>
+        <button type="button" class="btn btn-success" id="saveFormBtn">Add Form</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Record Modal -->
+<div id="addModal">
+  <div id="addModalContent" class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">➕ Add Custom Field</h5>
+        <button type="button" class="btn-close" onclick="closeAddModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info mb-3">
+          <strong>Document ID:</strong> <code id="generatedDocId">(will be generated)</code>
+        </div>
+        <div class="mb-3">
+          <label for="addDocName" class="form-label">Collection/Table Name</label>
+          <input type="text" class="form-control" id="addDocName" placeholder="e.g., users, products, orders...">
+          <div class="form-text">Optional: Name of the collection or table.</div>
+        </div>
+        <div class="mb-3">
+          <label for="addFieldName" class="form-label">Field Name <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="addFieldName" placeholder="e.g., name, age, email..." required>
+          <div class="form-text">Required: Name of the field to add.</div>
+        </div>
+        <div class="mb-3">
+          <label for="addFieldValue" class="form-label">Field Value <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="addFieldValue" placeholder="Enter value..." required>
+          <div class="form-text">Required: Value for the field.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelAddBtn">Cancel</button>
+        <button type="button" class="btn btn-info text-white" id="saveAddBtn">Add Record</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Record Modal -->
+<div id="deleteModal">
+  <div id="deleteModalContent" class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">🗑️ Delete Record</h5>
+        <button type="button" class="btn-close btn-close-white" onclick="closeDeleteModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <small class="text-muted d-block">Peer ID</small>
+          <code id="deletePeerId" class="text-primary"></code>
+        </div>
+        <div class="mb-3">
+          <small class="text-muted d-block">Doc ID</small>
+          <code id="deleteDocId" class="text-primary"></code>
+        </div>
+        <div class="mb-3">
+          <small class="text-muted d-block">Field</small>
+          <code id="deleteFieldName" class="text-info"></code>
+        </div>
+        <div class="mb-3">
+          <small class="text-muted d-block">Current Value</small>
+          <code id="deleteFieldValue" class="text-dark"></code>
+        </div>
+        <div class="alert alert-danger d-flex align-items-center" role="alert">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-exclamation-triangle-fill me-2" viewBox="0 0 16 16">
+            <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+          </svg>
+          <div>
+            <strong>Warning:</strong> Are you sure you want to delete this record? This action cannot be undone.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelDeleteBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <!-- Sidebar Toggle Function -->
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      sidebar.classList.toggle('active');
+      overlay.classList.toggle('active');
+    }
+    
+    function showSection(section) {
+      // Hide all sections
+      document.querySelectorAll('[id$="Section"]').forEach(el => {
+        el.style.display = 'none';
+      });
+      
+      // Show selected section
+      const targetSection = document.getElementById(section + 'Section');
+      if (targetSection) {
+        targetSection.style.display = 'block';
+      }
+      
+      // Update active nav link
+      document.querySelectorAll('#sidebar .nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      if (event && event.target) {
+        event.target.classList.add('active');
+      } else {
+        // If called programmatically, find the link by href
+        const link = document.querySelector(`#sidebar .nav-link[href="#${section}"]`);
+        if (link) link.classList.add('active');
+      }
+      
+      // Close sidebar on mobile after selection
+      if (window.innerWidth < 768) {
+        toggleSidebar();
+      }
+    }
+    
+    // Show Status section by default on page load
+    window.addEventListener('load', () => {
+      // Hide all sections first
+      document.querySelectorAll('[id$="Section"]').forEach(el => {
+        el.style.display = 'none';
+      });
+      
+      // Show only Status section
+      const statusSection = document.getElementById('statusSection');
+      if (statusSection) {
+        statusSection.style.display = 'block';
+      }
+      
+      // Ensure Status nav link is active
+      document.querySelectorAll('#sidebar .nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      const statusLink = document.querySelector('#sidebar .nav-link[href="#status"]');
+      if (statusLink) {
+        statusLink.classList.add('active');
+      }
+    });
+    
+    // Close sidebar when clicking outside on mobile
+    document.getElementById('sidebarOverlay').addEventListener('click', () => {
+      if (window.innerWidth < 768) {
+        toggleSidebar();
+      }
+    });
+  </script>
+</body>
+</html>
